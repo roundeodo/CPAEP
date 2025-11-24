@@ -110,6 +110,7 @@ module tb_mac_pe;
 
     // Driver conntrol
     for (int i = 0; i < NumTests; i++) begin
+
       for (int j = 0; j < NumInputs; j++) begin
         a_i[j] = $urandom();
         b_i[j] = $urandom();
@@ -134,7 +135,7 @@ module tb_mac_pe;
         $display("OUT: %d, GOLDEN: %d", $signed(c_o), $signed(golden_c_o));
         $fatal;
       end
-
+      $display("Test %0d passed.", i);
     end
 
     // Finish simulation after some time
