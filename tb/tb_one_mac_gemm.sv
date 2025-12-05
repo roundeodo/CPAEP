@@ -21,52 +21,69 @@ module tb_one_mac_gemm;
   // General Parameters
   parameter int unsigned InDataWidth   = 8;
   parameter int unsigned OutDataWidth  = 32;
+
+  parameter int unsigned meshRow      = 4;
+  parameter int unsigned meshCol      = 4;
+  parameter int unsigned tileSize     = 4;
+
+  parameter int unsigned SRAM_AB_Width = meshRow * tileSize * InDataWidth; // 128 bits
+  parameter int unsigned SRAM_C_Width  = meshRow * meshCol * OutDataWidth; // 512 bits
+
+
   parameter int unsigned DataDepth     = 4096;
   parameter int unsigned AddrWidth     = (DataDepth <= 1) ? 1 : $clog2(DataDepth);
-  parameter int unsigned SizeAddrWidth = 8;
-
+  parameter int unsigned SizeAddrWidth = 8; // counts blocks now?
+  
   // Test Parameters
-  parameter int unsigned MaxNum   = 32;
-  parameter int unsigned NumTests = 10;
+  parameter int unsigned NumTests = 1;
 
-  parameter int unsigned SingleM = 8;
-  parameter int unsigned SingleK = 8;
-  parameter int unsigned SingleN = 8;
+
+
+
+
 
   //---------------------------
   // Wires
   //---------------------------
 
-  // Size control
+  //use for block counting
   logic [SizeAddrWidth-1:0] M_i, K_i, N_i;
+
+  int unsigned total_row;
+  int unsigned total_col;
+  int unsigned total_k;
 
   // Clock, reset, and other signals
   logic clk_i;
   logic rst_ni;
   logic start;
   logic done;
-
+  
+ logic [AddrWidth-1:0] test_depth;
   //---------------------------
   // Memory
   //---------------------------
-  // Golden data dump
-  logic signed [OutDataWidth-1:0] G_memory [DataDepth];
-
   // Memory control
   logic [AddrWidth-1:0] sram_a_addr;
   logic [AddrWidth-1:0] sram_b_addr;
   logic [AddrWidth-1:0] sram_c_addr;
 
   // Memory access
-  logic signed [ InDataWidth-1:0] sram_a_rdata;
-  logic signed [ InDataWidth-1:0] sram_b_rdata;
-  logic signed [OutDataWidth-1:0] sram_c_wdata;
+  logic signed [ SRAM_AB_Width-1:0] sram_a_rdata;
+  logic signed [ SRAM_AB_Width-1:0] sram_b_rdata;
+  logic signed [SRAM_C_Width-1:0] sram_c_wdata;
   logic                           sram_c_we;
+
+  // Golden data storage
+  logic signed [SRAM_C_Width-1:0] G_memory [DataDepth];
+
 
   //---------------------------
   // Declaration of input and output memories
   //---------------------------
-
+  logic signed [InDataWidth-1:0] flat_A [DataDepth];
+  logic signed [InDataWidth-1:0] flat_B [DataDepth];
+  logic signed [OutDataWidth-1:0] flat_C_golden [DataDepth];
   //---------------------------
   // DESIGN NOTE:
   // These are where the memories are instantiated for the DUT.
@@ -87,7 +104,7 @@ module tb_one_mac_gemm;
   // Input memory A
   // Note: this is read only
   single_port_memory #(
-    .DataWidth     ( InDataWidth  ),
+    .DataWidth     ( SRAM_AB_Width),
     .DataDepth     ( DataDepth    ),
     .AddrWidth     ( AddrWidth    )
   ) i_sram_a (
@@ -102,7 +119,7 @@ module tb_one_mac_gemm;
   // Input memory B
   // Note: this is read only
   single_port_memory #(
-    .DataWidth     ( InDataWidth  ),
+    .DataWidth     ( SRAM_AB_Width),
     .DataDepth     ( DataDepth    ),
     .AddrWidth     ( AddrWidth    )
   ) i_sram_b (
@@ -117,7 +134,7 @@ module tb_one_mac_gemm;
   // Output memory C
   // Note: this is write only
   single_port_memory #(
-    .DataWidth     ( OutDataWidth ),
+    .DataWidth     ( SRAM_C_Width ),
     .DataDepth     ( DataDepth    ),
     .AddrWidth     ( AddrWidth    )
   ) i_sram_c (
@@ -136,14 +153,17 @@ module tb_one_mac_gemm;
     .InDataWidth   ( InDataWidth   ),
     .OutDataWidth  ( OutDataWidth  ),
     .AddrWidth     ( AddrWidth     ),
-    .SizeAddrWidth ( SizeAddrWidth )
+    .SizeAddrWidth ( SizeAddrWidth ),
+    .meshRow       ( meshRow       ),
+    .meshCol       ( meshCol       ),
+    .tileSize      ( tileSize      )
   ) i_dut (
     .clk_i          ( clk_i        ),
     .rst_ni         ( rst_ni       ),
     .start_i        ( start        ),
-    .N_size_i       ( N_i          ),
-    .M_size_i       ( M_i          ),
-    .K_size_i       ( K_i          ),
+    .N_size_i       ( N_i          ),//block count
+    .M_size_i       ( M_i          ),//block count
+    .K_size_i       ( K_i          ),//block count
     .sram_a_addr_o  ( sram_a_addr  ),
     .sram_b_addr_o  ( sram_b_addr  ),
     .sram_c_addr_o  ( sram_c_addr  ),
@@ -171,6 +191,98 @@ module tb_one_mac_gemm;
     forever #5 clk_i = ~clk_i;  // 100MHz clock
   end
 
+  
+
+  //initialize memories
+  task init_memories(
+    input int M_blk,
+    input int K_blk,
+    input int N_blk
+    );
+    logic signed [InDataWidth-1:0] temp_val;
+    logic [SRAM_AB_Width-1:0] packed_a;
+    logic [SRAM_AB_Width-1:0] packed_b;
+    int global_r;
+    int global_k;
+    int global_c;
+    //init SRAM A
+    for (int m = 0; m < M_blk; m++) begin
+      for(int k = 0; k < K_blk; k++) begin
+        packed_a = '0;
+
+        //pack 16 bytes 
+        for(int r = 0; r < meshRow; r++)begin
+          for(int t = 0; t < tileSize; t++)begin
+          temp_val = $urandom();
+          packed_a[(r*tileSize + t)*InDataWidth +: InDataWidth] = temp_val;  
+          
+          //fill flat A for golden
+          global_r = m*meshRow + r;
+          global_k = k*tileSize + t;
+          flat_A[global_r * total_k + global_k] = temp_val;
+          end
+        end
+        i_sram_a.memory[m*K_blk + k] = packed_a;
+      end
+    end
+
+    //init SRAM B
+    for (int n = 0; n < N_blk; n++) begin
+      for(int k = 0; k < K_blk; k++) begin
+        packed_b = '0;
+        //pack 16 bytes 
+        for(int c = 0; c < meshCol; c++)begin
+          for(int t = 0; t < tileSize; t++)begin
+          temp_val = $urandom();
+          packed_b[(c*tileSize + t)*InDataWidth +: InDataWidth] = temp_val;  
+          
+          //fill flat B for golden
+
+          global_c = n*meshCol + c;
+          global_k = k*tileSize + t;
+          flat_B[global_k * total_col + global_c] = temp_val;
+          end
+        end
+        i_sram_b.memory[n*K_blk + k] = packed_b;
+      end
+    end
+  endtask
+
+
+
+
+
+  task verify_result_c(
+    input int M_blk,
+    input int N_blk
+  );
+    int errors;
+    int global_r;
+    int global_c;
+    logic signed [OutDataWidth-1:0] dut_value;
+    logic signed [OutDataWidth-1:0] golden_value;
+    logic [SRAM_C_Width-1:0] c_block;
+    errors = 0;
+
+    for(int m = 0; m < M_blk; m++) begin
+      for(int n = 0; n < N_blk; n++) begin
+        c_block = i_sram_c.memory[m*N_blk + n];
+        for(int r = 0; r < meshRow; r++) begin
+          for(int c = 0; c < meshCol; c++) begin
+            dut_value = c_block[(r*meshCol + c)*OutDataWidth +: OutDataWidth];
+            global_r = m*meshRow + r;
+            global_c = n*meshCol + c;
+            golden_value = flat_C_golden[global_r * total_col + global_c];
+            if (dut_value !== golden_value) begin
+              $display("ERROR: Mismatch at C(%0d, %0d): expected %0d, got %0d",
+                       global_r, global_c, golden_value, dut_value);
+              errors++;
+            end  
+          end
+        end
+      end
+    end
+  endtask
   //---------------------------
   // DESIGN NOTE:
   //
@@ -207,18 +319,34 @@ module tb_one_mac_gemm;
     for (integer num_test = 0; num_test < NumTests; num_test++) begin
       $display("Test number: %0d", num_test);
 
-      if (NumTests > 1) begin
-        M_i = $urandom_range(1, MaxNum);
-        K_i = $urandom_range(1, MaxNum);
-        N_i = $urandom_range(1, MaxNum);
-      end else begin
-        M_i = SingleM;
-        K_i = SingleK;
-        N_i = SingleN;
-      end
-
-      $display("M: %0d, K: %0d, N: %0d", M_i, K_i, N_i);
-
+      if(num_test == 0) begin
+        //case 1 :4x64 * 64x16
+        M_i = 1; K_i = 16; N_i = 4;
+        $display(">>CASE1: 4x64 * 64x16");
+        end
+        else if (num_test == 1) begin
+            // Case 2: 16x64 * 64x4
+            // M=4 Blocks (16 rows), K=16 Blocks (64 depth), N=1 Block (4 cols)
+            M_i = 4; K_i = 16; N_i = 1;
+            $display(">> Case 2: 16x64 * 64x4");
+        end        
+        else if (num_test == 2) begin
+            // Case 3: 32x32 * 32x32
+            // M=8 Blocks (32 rows), K=8 Blocks (32 depth), N=8 Blocks (32 cols)
+            M_i = 8; K_i = 8; N_i = 8;
+            $display(">> Case 3: 32x32 * 32x32");
+        end 
+        else begin
+            // Random Tests (Upper limit: 8 blocks = 32 size)
+            M_i = $urandom_range(1, 8);
+            K_i = $urandom_range(1, 8);
+            N_i = $urandom_range(1, 8);
+            $display(">> Random Case");
+        end
+        total_col = N_i * meshCol;
+        total_row = M_i * meshRow;
+        total_k   = K_i * tileSize;
+        $display("for test %0d   Block Dimensions: M=%0d, K=%0d, N=%0d", num_test, M_i, K_i, N_i);
       //---------------------------
       // DESIGN NOTE:
       // You will most likely modify this part
@@ -249,33 +377,20 @@ module tb_one_mac_gemm;
       // make sure that the data elements are packed
       // correctly within each memory word.
       //---------------------------
+      
+      // Initialize input memories and compute golden result
+      init_memories(M_i, K_i, N_i);
+      gemm_golden(total_row, total_k, total_col, flat_A, flat_B, flat_C_golden);
 
-      // Initialize memories with random data
-      for (integer m = 0; m < M_i; m++) begin
-        for (integer k = 0; k < K_i; k++) begin
-          i_sram_a.memory[m*K_i+k] = $urandom() % (2 ** InDataWidth);
-        end
-      end
-
-      for (integer k = 0; k < K_i; k++) begin
-        for (integer n = 0; n < N_i; n++) begin
-          i_sram_b.memory[k*N_i+n] = $urandom() % (2 ** InDataWidth);
-        end
-      end
-
-      // Generate golden result
-      gemm_golden(M_i, K_i, N_i, i_sram_a.memory, i_sram_b.memory, G_memory);
 
       // Just delay 1 cycle
       clk_delay(1);
 
       // Execute the GeMM
       start_and_wait_gemm();
-
-      // Verify the result
-      verify_result_c(G_memory, i_sram_c.memory, DataDepth,
-                      0 // Set this to 1 to make mismatches fatal
-      );
+      
+      clk_delay(5);
+      verify_result_c(M_i, N_i);
 
       // Just some trailing cycles
       // For easier monitoring in waveform

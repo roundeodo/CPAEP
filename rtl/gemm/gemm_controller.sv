@@ -2,7 +2,7 @@
 // The GeMM Controller Module
 //
 // Description:
-// This module implements the controller for the 1-MAC GeMM accelerator.
+// This module implements the controller for the 64-MAC GeMM accelerator.
 // It manages the operation by controlling the M, K, and N counters,
 // which get into the address generation logic in the accelerator top.
 //
@@ -21,12 +21,12 @@
 // - result_valid_o: Result valid signal indicating output data is ready.
 // - busy_o       : Busy signal indicating the controller is processing.
 // - done_o       : Done signal indicating completion of the GeMM operation.
-// - M_size_i     : Size of matrix M (number of rows in A and C).
-// - K_size_i     : Size of matrix K (number of columns in A and rows in B).
-// - N_size_i     : Size of matrix N (number of columns in B and C).
-// - M_count_o    : Current count of M dimension.
-// - K_count_o    : Current count of K dimension.
-// - N_count_o    : Current count of N dimension.
+// - M_size_i     : numbers of block M (number of M_blocks in A and C).
+// - K_size_i     : numbers of block K (number of K_blocks in A and B).
+// - N_size_i     : numbers of block N (number of N_blocks in B and C).
+// - M_count_o    : Current count of M block.
+// - K_count_o    : Current count of K block.
+// - N_count_o    : Current count of N block.
 //---------------------------
 
 module gemm_controller #(
@@ -36,31 +36,36 @@ module gemm_controller #(
   input  logic rst_ni,
   input  logic start_i,
   input  logic input_valid_i,
+
+  output logic init_save_o,//when k count == 0   means we are starting to calculate the value of another C block
+
   output logic result_valid_o,
   output logic busy_o,
   output logic done_o,
-  // The target M, K, and N sizes
+  // The target M, K, and N block count
   input  logic [AddrWidth-1:0] M_size_i,
   input  logic [AddrWidth-1:0] K_size_i,
   input  logic [AddrWidth-1:0] N_size_i,
-  // The the current M, K, and N counts
+  // The the current M, K, and N block indices
   output logic [AddrWidth-1:0] M_count_o,
   output logic [AddrWidth-1:0] K_count_o,
-  output logic [AddrWidth-1:0] N_count_o
+  output logic [AddrWidth-1:0] N_count_o,
+  output logic [AddrWidth-1:0] M_count_write_o,
+  output logic [AddrWidth-1:0] N_count_write_o
 );
 
   //-----------------------
   // Wires and logic
   //-----------------------
   logic move_K_counter;
-  logic move_N_counter;
-  logic move_M_counter;
+  logic move_N_counter; //means K loop done
+  logic move_M_counter; //means N loop done
   logic move_counter;
 
   assign move_K_counter = move_counter;
 
   logic clear_counters;
-  logic last_counter_last_value;
+  logic last_counter_last_value; //M loop done => global done
 
   // State machine states
   typedef enum logic [1:0] {
@@ -76,20 +81,23 @@ module gemm_controller #(
 
   //-----------------------
   // DESIGN NOTE:
-  // Counters for M, K, and N dimensions.
-  // These counters are used to keep track of the current position
+  // Counters for M, K, and N blocks.
+  // These counters are used to keep track of the current block indices
   // in the matrix multiplication process.
   //
   // They are instantiated using a generic ceiling_counter module.
   // Each counter increments based on the move_counter signal
   // and resets when clear_counters is asserted.
   //
-  // Practically, for a single MAC we use a simple for-loop scheme:
+  // Practically, for a 64 MAC we use a simple for-loop scheme:
   //
-  // for m = 0 to M-1
-  //   for n = 0 to N-1
-  //     for k = 0 to K-1
-  //       C[m][n] += A[m][k] * B[k][n]
+  // for m1 = 0 to M-1
+  //    for n1 = 0 to N-1
+  //      for k1 = 0 to K-1
+  //        parfor m2 = 0 to Mu
+  //          parfor n2 = 0 to Nu
+  //           parfor k2 = 0 to Ku
+  //            C[m1*Mu + m2][n1*Nu + n2] += A[m1*Mu + m2][k1*Ku + k2] * B[k1*Ku + k2][n1*Nu + n2]
   //
   // This is the dataflow that the counters help to manage.
   // This will change when we start to have more spatial parallelism.
@@ -171,6 +179,27 @@ module gemm_controller #(
   // consistent with your design choices.
   //-----------------------
 
+  // C address control
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      result_valid_o <= 1'b0;
+      M_count_write_o <= '0;
+      N_count_write_o <= '0;
+    end 
+    else begin
+      result_valid_o <= 1'b0;
+
+      if(current_state == ControllerBusy && move_counter) begin
+        if(move_N_counter || last_counter_last_value) begin
+          result_valid_o <= 1'b1;
+          M_count_write_o <= M_count_o;
+          N_count_write_o <= N_count_o;
+        end
+      end
+    end
+  end
+
+
   // Main controller state machine
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
@@ -180,12 +209,19 @@ module gemm_controller #(
     end
   end
 
+  //init_save_o update logic
+  always_comb begin
+    if((current_state == ControllerBusy) && input_valid_i && (K_count_o == '0)) 
+      init_save_o = 1'b1;
+    else
+      init_save_o = 1'b0;
+  end
+
   always_comb begin
     // Default assignments
     next_state     = current_state;
     clear_counters = 1'b0;
     move_counter   = 1'b0;
-    result_valid_o = 1'b0;
     done_o         = 1'b0;
 
     case (current_state)
@@ -198,20 +234,15 @@ module gemm_controller #(
 
       ControllerBusy: begin
         move_counter = input_valid_i;
-        // Check if we are done
+
+        // check if we finish the calculation for all the C block
         if (last_counter_last_value) begin
           next_state = ControllerFinish;
-        end else if (input_valid_i
-                     && K_count_o == '0 
-                     && (M_count_o != '0 || N_count_o != '0)) begin
-          // Check when result_valid_o should be asserted
-          result_valid_o = 1'b1;
-        end
+        end 
       end
 
       ControllerFinish: begin
         done_o         = 1'b1;
-        result_valid_o = 1'b1;
         clear_counters = 1'b1;
         next_state     = ControllerIdle;
       end

@@ -27,11 +27,11 @@ module ceiling_counter #(
 ) (
   input  logic             clk_i,
   input  logic             rst_ni,       // active-low async reset
-  input  logic             tick_i,
+  input  logic             tick_i,       //enable signal
   input  logic             clear_i,      // active-high sync clear
-  input  logic [Width-1:0] ceiling_i,
+  input  logic [Width-1:0] ceiling_i,   //it will be reset when the value reach ceiling
   output logic [Width-1:0] count_o,
-  output logic             last_value_o
+  output logic             last_value_o // high when count_o reaches ceiling_i - 1
 );
 
   // Main counter

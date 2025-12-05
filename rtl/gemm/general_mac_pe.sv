@@ -64,13 +64,17 @@ module general_mac_pe #(
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
       c_o <= '0;
-    end else if (init_save_i) begin
+    end 
+    else if (init_save_i) begin  // means initialzation  the old result will be covered directly
       c_o <= mult_result;
-    end else if (acc_valid) begin
+    end 
+    else if (acc_valid) begin
       c_o <= c_o + mult_result;
-    end else if (acc_clr_i) begin
+    end 
+    else if (acc_clr_i) begin
       c_o <= '0;
-    end else begin
+    end 
+    else begin
       c_o <= c_o;
     end
   end

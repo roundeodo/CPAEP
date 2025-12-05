@@ -1,0 +1,3 @@
+rtl/gemm/mac_array_3D_444.sv
+rtl/gemm/general_mac_pe.sv
+tb/tb_mac_array_3D_444.sv
