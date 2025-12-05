@@ -35,7 +35,7 @@ module tb_one_mac_gemm;
   parameter int unsigned SizeAddrWidth = 8; // counts blocks now?
   
   // Test Parameters
-  parameter int unsigned NumTests = 1;
+  parameter int unsigned NumTests = 30;
 
 
 
@@ -278,6 +278,10 @@ module tb_one_mac_gemm;
                        global_r, global_c, golden_value, dut_value);
               errors++;
             end  
+            // else begin
+            //   $display("correct: match at C(%0d, %0d): expected %0d, got %0d",
+            //            global_r, global_c, golden_value, dut_value);              
+            // end
           end
         end
       end
@@ -338,9 +342,9 @@ module tb_one_mac_gemm;
         end 
         else begin
             // Random Tests (Upper limit: 8 blocks = 32 size)
-            M_i = $urandom_range(1, 8);
-            K_i = $urandom_range(1, 8);
-            N_i = $urandom_range(1, 8);
+            M_i = $urandom_range(1, 16);
+            K_i = $urandom_range(1, 16);
+            N_i = $urandom_range(1, 16);
             $display(">> Random Case");
         end
         total_col = N_i * meshCol;

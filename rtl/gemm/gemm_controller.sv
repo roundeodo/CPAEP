@@ -189,7 +189,7 @@ module gemm_controller #(
     else begin
       result_valid_o <= 1'b0;
 
-      if(current_state == ControllerBusy && move_counter) begin
+      if((current_state == ControllerBusy && move_counter)|| current_state == ControllerIdle && start_i) begin
         if(move_N_counter || last_counter_last_value) begin
           result_valid_o <= 1'b1;
           M_count_write_o <= M_count_o;
