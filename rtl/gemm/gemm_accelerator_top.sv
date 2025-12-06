@@ -135,14 +135,14 @@ module gemm_accelerator_top #(
 
   // matrix C :row-major of blocks [M_block][N_block]
   //  address_C = M_count * N_size_i + N_count
-  // always_ff @(posedge clk_i or negedge rst_ni) begin
-  //   if (!rst_ni) begin
-  //     sram_c_addr_o <= '0;
-  //   end else if (1'b1) begin  // Always valid in this simple design
-  //     sram_c_addr_o <= (M_count_write * N_size_i + N_count_write);
-  //   end
-  // end
-  assign sram_c_addr_o = (M_count_write * N_size_i + N_count_write);
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      sram_c_addr_o <= '0;
+    end else if (1'b1) begin  // Always valid in this simple design
+      sram_c_addr_o <= (M_count * N_size_i + N_count);
+    end
+  end
+  //assign sram_c_addr_o = (M_count_write * N_size_i + N_count_write);
 
 
   //---------------------------

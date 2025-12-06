@@ -1,0 +1,2 @@
+var g_data = {"name":"includes/common_tasks.svh","src":"//--------------------------\n// Library of common tasks for any testbench\n//--------------------------\n\n// Time delays\ntask time_delay (input delay);\n  begin\n    #delay;\n  end\nendtask\n\n// Clock delays\ntask clk_delay(\n  input int delay\n);\n  begin\n    for(int i=0; i < delay; i++) begin\n      @(posedge clk_i);\n    end\n  end\n  #1;\nendtask\n\ntask clk_unit_delay();\n  begin\n    @(posedge clk_i);\n  end\nendtask\n","lang":"verilog"};
+processSrcData(g_data);

@@ -35,7 +35,7 @@ module tb_one_mac_gemm;
   parameter int unsigned SizeAddrWidth = 8; // counts blocks now?
   
   // Test Parameters
-  parameter int unsigned NumTests = 30;
+  parameter int unsigned NumTests = 50;
 
 
 
@@ -280,7 +280,7 @@ module tb_one_mac_gemm;
             end  
             // else begin
             //   $display("correct: match at C(%0d, %0d): expected %0d, got %0d",
-            //            global_r, global_c, golden_value, dut_value);              
+            //            global_r, global_c, golden_value, dut_value);
             // end
           end
         end
@@ -325,7 +325,7 @@ module tb_one_mac_gemm;
 
       if(num_test == 0) begin
         //case 1 :4x64 * 64x16
-        M_i = 1; K_i = 16; N_i = 4;
+        M_i = 1; K_i = 1; N_i = 3;
         $display(">>CASE1: 4x64 * 64x16");
         end
         else if (num_test == 1) begin

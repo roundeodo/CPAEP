@@ -179,25 +179,21 @@ module gemm_controller #(
   // consistent with your design choices.
   //-----------------------
 
-  // C address control
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni) begin
-      result_valid_o <= 1'b0;
-      M_count_write_o <= '0;
-      N_count_write_o <= '0;
-    end 
-    else begin
-      result_valid_o <= 1'b0;
+  // // C address control
+  // always_ff @(posedge clk_i or negedge rst_ni) begin
+  //   if (!rst_ni) begin
+  //     result_valid_o <= 1'b0;
+  //   end 
+  //   else begin
+  //     result_valid_o <= 1'b0;
 
-      if((current_state == ControllerBusy && move_counter)|| current_state == ControllerIdle && start_i) begin
-        if(move_N_counter || last_counter_last_value) begin
-          result_valid_o <= 1'b1;
-          M_count_write_o <= M_count_o;
-          N_count_write_o <= N_count_o;
-        end
-      end
-    end
-  end
+  //     if((current_state == ControllerBusy && move_counter)|| current_state == ControllerIdle && start_i) begin
+  //       if(move_N_counter || last_counter_last_value) begin
+  //         result_valid_o <= 1'b1;
+  //       end
+  //     end
+  //   end
+  // end
 
 
   // Main controller state machine
@@ -213,7 +209,9 @@ module gemm_controller #(
   always_comb begin
     if((current_state == ControllerBusy) && input_valid_i && (K_count_o == '0)) 
       init_save_o = 1'b1;
-    else
+    else if((current_state == ControllerIdle) && start_i)
+      init_save_o = 1'b1;
+    else 
       init_save_o = 1'b0;
   end
 
@@ -222,6 +220,7 @@ module gemm_controller #(
     next_state     = current_state;
     clear_counters = 1'b0;
     move_counter   = 1'b0;
+    result_valid_o = 1'b0;
     done_o         = 1'b0;
 
     case (current_state)
@@ -234,15 +233,20 @@ module gemm_controller #(
 
       ControllerBusy: begin
         move_counter = input_valid_i;
-
-        // check if we finish the calculation for all the C block
+        // Check if we are done
         if (last_counter_last_value) begin
           next_state = ControllerFinish;
-        end 
+          result_valid_o = 1'b1;
+        end
+        else if (input_valid_i && K_count_o == '0 ) begin
+          // Check when result_valid_o should be asserted
+          result_valid_o = 1'b1;
+        end
       end
 
       ControllerFinish: begin
         done_o         = 1'b1;
+        result_valid_o = 1'b1;
         clear_counters = 1'b1;
         next_state     = ControllerIdle;
       end
