@@ -68,8 +68,7 @@ module gemm_accelerator_top #(
   logic [SizeAddrWidth-1:0] M_count;
   logic [SizeAddrWidth-1:0] K_count;
   logic [SizeAddrWidth-1:0] N_count;
-  logic [SizeAddrWidth-1:0] M_count_write;
-  logic [SizeAddrWidth-1:0] N_count_write;
+
 
   logic busy;
   logic valid_data;
@@ -110,9 +109,7 @@ module gemm_accelerator_top #(
     //the block indices of M, K, N
     .M_count_o      ( M_count     ),
     .K_count_o      ( K_count     ),
-    .N_count_o      ( N_count     ),
-    .M_count_write_o( M_count_write),
-    .N_count_write_o( N_count_write)
+    .N_count_o      ( N_count     )
   );
 
   //---------------------------

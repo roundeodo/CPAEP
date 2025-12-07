@@ -343,7 +343,7 @@ module tb_one_mac_gemm;
         else begin
             // Random Tests (Upper limit: 8 blocks = 32 size)
             M_i = $urandom_range(1, 16);
-            K_i = $urandom_range(1, 16);
+            K_i = $urandom_range(1, 18);
             N_i = $urandom_range(1, 16);
             $display(">> Random Case");
         end
@@ -396,10 +396,12 @@ module tb_one_mac_gemm;
       clk_delay(5);
       verify_result_c(M_i, N_i);
 
+
       // Just some trailing cycles
       // For easier monitoring in waveform
       clk_delay(10);
     end
+
 
     $display("All test tasks completed successfully!");
     $finish;

@@ -49,9 +49,7 @@ module gemm_controller #(
   // The the current M, K, and N block indices
   output logic [AddrWidth-1:0] M_count_o,
   output logic [AddrWidth-1:0] K_count_o,
-  output logic [AddrWidth-1:0] N_count_o,
-  output logic [AddrWidth-1:0] M_count_write_o,
-  output logic [AddrWidth-1:0] N_count_write_o
+  output logic [AddrWidth-1:0] N_count_o
 );
 
   //-----------------------
@@ -179,21 +177,7 @@ module gemm_controller #(
   // consistent with your design choices.
   //-----------------------
 
-  // // C address control
-  // always_ff @(posedge clk_i or negedge rst_ni) begin
-  //   if (!rst_ni) begin
-  //     result_valid_o <= 1'b0;
-  //   end 
-  //   else begin
-  //     result_valid_o <= 1'b0;
 
-  //     if((current_state == ControllerBusy && move_counter)|| current_state == ControllerIdle && start_i) begin
-  //       if(move_N_counter || last_counter_last_value) begin
-  //         result_valid_o <= 1'b1;
-  //       end
-  //     end
-  //   end
-  // end
 
 
   // Main controller state machine
